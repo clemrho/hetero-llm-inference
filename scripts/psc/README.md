@@ -15,7 +15,7 @@ good for checking that servers start.
 
 ```bash
 ssh <psc_user>@bridges2.psc.edu
-cd $PROJECT && git clone https://github.com/clemrho/hetero-agent-routing && cd hetero-agent-routing
+cd $PROJECT && git clone https://github.com/clemrho/hetero-llm-inference && cd hetero-llm-inference
 WITH_PS=1 bash scripts/psc/setup.sh     # ~10 min; drop WITH_PS=1 to skip the Production Stack router
 ```
 
@@ -28,7 +28,7 @@ Either interactively:
 
 ```bash
 interact -p GPU-shared --gres=gpu:l40s-48:1 -t 01:00:00
-cd $PROJECT/hetero-agent-routing
+cd $PROJECT/hetero-llm-inference
 bash scripts/psc/run_smoke.sh
 ```
 

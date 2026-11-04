@@ -1,7 +1,7 @@
 # Cache-Aware Routing of Agent Workflows on Heterogeneous Accelerators
 
 **11-868 LLM Systems · Project Mid-term Report** · Yanze, Keyi, Hannah · November 2026
-Code: https://github.com/clemrho/hetero-agent-routing
+Code: https://github.com/clemrho/hetero-llm-inference
 
 ## 1. Introduction and Motivation
 

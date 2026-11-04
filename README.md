@@ -1,4 +1,4 @@
-# hetero-agent-routing
+# hetero-llm-inference
 
 Routing agent workflows across heterogeneous accelerators (TPU v5e + GPU) with vLLM.
 CMU 11-868 LLM Systems course project · Yanze, Keyi, Hannah.
@@ -58,7 +58,7 @@ The router runs next to the TPU because the Colab runtime can only open outgoing
    sbatch --export=ALL,MODEL=Qwen/Qwen3-4B,MAX_LEN=16384 scripts/psc/serve.sbatch
    cat slurm-har-serve-<jobid>.out    # wait for: READY node=...
    ```
-2. **TPU on Colab**: open [scripts/colab/tpu_psc_smoke.ipynb](https://colab.research.google.com/github/clemrho/hetero-agent-routing/blob/yanze/colab-tpu-psc/scripts/colab/tpu_psc_smoke.ipynb)
+2. **TPU on Colab**: open [scripts/colab/tpu_psc_smoke.ipynb](https://colab.research.google.com/github/clemrho/hetero-llm-inference/blob/yanze/colab-tpu-psc/scripts/colab/tpu_psc_smoke.ipynb)
    (branch `yanze/colab-tpu-psc` until it is merged) with a TPU v5e runtime; set `BRANCH`, `MODEL`, `MAX_LEN`, `PSC_USER`, `PSC_NODE`, run all cells.
 3. **Single GPU only** (no TPU): `bash scripts/psc/run_smoke.sh` on a PSC GPU node runs both backends on one GPU.
 
