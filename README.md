@@ -1,4 +1,4 @@
-# hetero-agent-routing
+# hetero-llm-inference
 
 Routing agent workflows across heterogeneous accelerators (A100 GPU + TPU) with vLLM.
 CMU 11-868 LLM Systems course project.
