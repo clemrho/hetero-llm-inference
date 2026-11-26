@@ -19,12 +19,36 @@ python replay/replay.py --trace traces/synthetic.jsonl --sweep \
 ```
 
 Output in `logs/<trace name>/`:
-- `CA_c4_r0.jsonl`: one line per LLM call (written by the Router: 4 timestamps, device, cached_tokens)
+- `CA_c4_r0.jsonl`: foreground `call` events, plus workflow completion events; GapShift adds `prewarm` and `gap_decision` events
 - `CA_c4_r0.meta.json`: settings, salt, wall time
+- `CA_c4_r0.metrics.json`: backend models, versions and raw engine metrics before/after the run
 - `CA_c4_r0.errors.jsonl`: failed calls, only if any (each call is retried once; a workflow whose call
   still fails is dropped, and the run's summary line says so)
 
-An existing log is skipped, so an interrupted sweep can just be restarted; `--overwrite` redoes it.
+A run is skipped only when completed metadata matches the requested configuration.
+An interrupted or different run requires `--overwrite` or a new output directory.
+Failed workflows cause a nonzero exit status.
+
+## Profile-based methods
+
+Collect profiles from the router machine while both engines are idle, then run:
+
+```bash
+python scripts/profile_backends.py --out logs/profiles.json
+python replay/replay.py --trace traces/synthetic.jsonl --sweep \
+    --policies CA PROFILE GAPSHIFT --profiles logs/profiles.json \
+    --concurrency_list 4 8 16 --reps 3
+```
+
+PROFILE adapts placement without pre-warming; GAPSHIFT can rebuild the previous
+prompt during the tool wait. Default predictions use only previous observed
+steps. `--gap_mode oracle` reveals actual future sizes/gaps as a labelled ablation.
+`--gap_scale`, `--gap_margin_s` and `--max_prewarms 0` support controlled ablations.
+The [EC2 guide](../scripts/ec2/README.md) and [method notes](../docs/gapshift.md)
+describe the full comparison and model assumptions.
+
+Analysis keeps pre-warm work separate from foreground latency and cache reuse.
+Cancelled pre-warms have unknown partial engine work and are counted explicitly.
 
 ## Details worth knowing
 

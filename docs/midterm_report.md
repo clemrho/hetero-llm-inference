@@ -3,6 +3,11 @@
 **11-868 LLM Systems · Project Mid-term Report** · Yanze, Keyi, Hannah · November 2026
 Code: https://github.com/clemrho/hetero-llm-inference
 
+> Historical report: the deployment and results below describe the November 3 PSC
+> experiments. The current implementation uses EC2 L40S and adds PROFILE/GapShift;
+> see [the EC2 guide](../scripts/ec2/README.md) and [method notes](gapshift.md).
+> New hardware measurements are required before updating the reported results.
+
 ## 1. Introduction and Motivation
 
 LLM agents do not issue independent requests. An agent workflow is a chain of LLM calls with a

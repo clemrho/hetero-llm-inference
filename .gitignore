@@ -1,6 +1,8 @@
 __pycache__/
 *.pyc
 .venv/
+.venv-ec2/
+.runtime/
 .ipynb_checkpoints/
 .DS_Store
 logs/

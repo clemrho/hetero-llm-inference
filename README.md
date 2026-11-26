@@ -1,65 +1,84 @@
 # hetero-llm-inference
 
-Routing agent workflows across heterogeneous accelerators (TPU v5e + GPU) with vLLM.
-CMU 11-868 LLM Systems course project · Yanze, Keyi, Hannah.
+Routing agent workflows across heterogeneous accelerators with vLLM.
+CMU 11-868 LLM Systems · Yanze, Keyi, Hannah.
 
-An agent workflow is a chain of LLM calls with tool calls in between; each call's prompt is the
-previous one plus new tokens, so prefix caching saves most of the prefill, but only if the call
-lands on the device that holds the cache. With two devices that have different speed profiles,
-the router has to trade cache reuse against load. We compare standard policies on this setting
-and are building **GapShift**, which uses the tool-call gaps to re-place a workflow's context.
+The current deployment is **Colab TPU v5e + AWS EC2 L40S**. Each device serves a
+full model replica with prefix caching. Growing workflow prompts create a trade-off
+between cache locality and load. **GapShift** uses tool-call gaps to rebuild a
+known prefix on a better destination before the next call arrives.
 
-- Midterm report: [docs/midterm_report.md](docs/midterm_report.md)
-- Plan, roles, timeline: [docs/PLAN.md](docs/PLAN.md)
-- Results: [results/](results/README.md) (latest: [2026-11-03 TPU v5e + L40S, long context to ~27k](results/2026-11-03_tpu-v5e_l40s_long16/README.md))
+- [EC2 setup and complete experiment commands](scripts/ec2/README.md)
+- [Colab TPU + EC2 notebook](scripts/colab/tpu_ec2.ipynb)
+- [GapShift design, cost model and ablations](docs/gapshift.md)
+- [Midterm report](docs/midterm_report.md), [plan](docs/PLAN.md), [historical results](results/README.md)
 
-## How it fits together
+The November 3 results and midterm report describe PSC experiments. The EC2
+adaptation and GapShift implementation need fresh hardware measurements; no new
+performance improvement is claimed here.
 
-```
-Colab (TPU v5e)
- ├─ vLLM-TPU               127.0.0.1:8000  "tpu"
- ├─ SSH tunnel             127.0.0.1:8001 ──► bridges2.psc.edu ──► PSC L40S node: vLLM  "gpu"
- └─ replay/replay.py ──► router/router.py (policy) ──► one of the two backends
-                         └─ logs one JSON line per call ──► analysis/analyze.py
-```
+## Deployment
 
-The router runs next to the TPU because the Colab runtime can only open outgoing connections.
+The router runs in Colab next to the TPU server on port 8000. Colab opens an SSH
+tunnel from local port 8001 directly to the EC2 GPU server's loopback port 8000.
+PSC's login node and Slurm jobs are no longer needed for this path.
 
-## Layout
+1. On the EC2 instance, run `bash scripts/ec2/setup.sh`, then
+   `bash scripts/ec2/serve.sh` inside tmux. Defaults: Qwen3-4B, bfloat16,
+   16384 maximum sequence length, prefix caching, cached-token reporting.
+2. Open `scripts/colab/tpu_ec2.ipynb` in Colab with a TPU v5e runtime. Set the
+   branch containing these changes, the matching model/length, and EC2 connection
+   details. Run the backend checks and collect profiles from Colab.
+3. Replay the comparison matrix. Full commands and expected outputs are in the
+   [EC2 guide](scripts/ec2/README.md).
 
-| Path | What |
-|---|---|
-| `router/router.py` | Router: policies LB / FF / CA / RR / PS, client-side timing (TTFT, cached tokens), synthetic smoke test |
-| `baselines/prodstack/` | Official vLLM Production Stack router in session mode (PS baseline) |
-| `traces/` | Trace format; `gen_synthetic.py` generates synthetic agent workflows |
-| `replay/` | `replay.py` replays traces through the router (sweeps over policy × concurrency × reps); `mock_vllm.py` fake server for testing |
-| `analysis/analyze.py` | Makespan, TTFT p50/p99, cache hit rate vs. its upper bound, device split |
-| `scripts/check_backend.py` | Health + cold/warm prefix-cache check for any vLLM backend |
-| `scripts/psc/` | PSC Bridges-2: setup, smoke test, `serve.sbatch` for the remote GPU ([README](scripts/psc/README.md)) |
-| `scripts/colab/` | Colab TPU v5e notebook: vLLM-TPU, tunnel, checks, baseline sweep ([README](scripts/colab/README.md)) |
-| `results/` | One folder per reported run: setup, commands, tables, raw output |
-| `docs/` | Plan and reports |
+The router uses `TPU_URL`, `GPU_URL` (`A100_URL` remains an alias), `PS_URL` and
+`MODEL`. Server settings are environment variables; deployment code has no fixed
+instance address, username or private-key path.
 
 ## Policies
 
 | Policy | Rule |
 |---|---|
-| LB | least in-flight requests (ties → `gpu`) |
-| FF | `gpu` until it has 4 in flight, then spill to `tpu` |
-| CA | first step by LB, then the workflow stays on that device |
-| RR | alternate devices |
-| PS | official Production Stack router, session mode (hash of `x-session-id` = workflow id) |
-| GapShift | in progress: at each tool gap, re-place the context where the next call is cheapest |
+| LB | Least in-flight requests; ties prefer `gpu` |
+| FF | `gpu` until four requests are in flight, then spill to `tpu` |
+| CA | First request by LB, then keep the workflow on that device |
+| RR | Alternate devices using a global request counter |
+| PS | Forward to the official vLLM Production Stack session router |
+| PROFILE | Choose by measured queue, cached-prefill and decode cost; no pre-warming |
+| GAPSHIFT | Keep a home device; pre-warm the known prefix during a tool gap when predicted savings exceed a margin |
 
-## Run it
+`PROFILE` and `GAPSHIFT` require measured JSON profiles. GapShift bounds background
+work and changes home only after a successful pre-warm. Unfinished pre-warms are
+cancelled at tool return. Its default gap/size predictions use previous observed
+steps; `--gap_mode oracle` is an explicit separate ablation.
 
-1. **GPU on PSC** (once: `bash scripts/psc/setup.sh` on a login node, add `MODEL=Qwen/Qwen3-4B` for the 4B weights):
-   ```bash
-   sbatch --export=ALL,MODEL=Qwen/Qwen3-4B,MAX_LEN=16384 scripts/psc/serve.sbatch
-   cat slurm-har-serve-<jobid>.out    # wait for: READY node=...
-   ```
-2. **TPU on Colab**: open [scripts/colab/tpu_psc_smoke.ipynb](https://colab.research.google.com/github/clemrho/hetero-llm-inference/blob/yanze/colab-tpu-psc/scripts/colab/tpu_psc_smoke.ipynb)
-   (branch `yanze/colab-tpu-psc` until it is merged) with a TPU v5e runtime; set `BRANCH`, `MODEL`, `MAX_LEN`, `PSC_USER`, `PSC_NODE`, run all cells.
-3. **Single GPU only** (no TPU): `bash scripts/psc/run_smoke.sh` on a PSC GPU node runs both backends on one GPU.
+## Layout
 
-Environment variables used by the router: `TPU_URL`, `GPU_URL` (old name `A100_URL` still works), `PS_URL`, `MODEL`.
+| Path | Purpose |
+|---|---|
+| `router/` | Baselines, GapShift, empirical cost model, shared streaming measurements |
+| `scripts/ec2/` | Dedicated GPU environment, model server, direct SSH tunnel, run guide |
+| `scripts/colab/tpu_ec2.ipynb` | TPU server, EC2 connection, profiles, repeated sweeps and ablations |
+| `scripts/profile_backends.py` | Unloaded cold/warm TTFT and decode profiles on the actual client path |
+| `scripts/run_experiments.sh` | Comparison matrix and optional ablations |
+| `replay/` | Validated token-exact trace replay, metadata, engine metrics, mock backend |
+| `analysis/analyze.py` | Workflow latency, TTFT, cache reuse, throughput, failures and pre-warm overhead |
+| `tests/` | Protocol, routing, cancellation and profile-to-analysis integration tests |
+| `baselines/prodstack/` | External official session-routing baseline |
+| `traces/` | Synthetic traces and the common format for measured workflows |
+| `scripts/psc/` | Historical PSC deployment, retained for reproduction |
+| `results/`, `docs/` | Historical experiments, reports and current design notes |
+
+## Local checks
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pytest -q tests
+DRY_RUN=1 bash scripts/ec2/serve.sh
+```
+
+Tests use an in-process HTTP transport and do not require accelerator access.
+Hardware work still needed: validate both serving stacks, collect EC2/TPU profiles,
+run repeated short/long context comparisons, calibrate queue estimates, and
+collect/replay real QA-derived traces.

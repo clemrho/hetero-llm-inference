@@ -1,7 +1,7 @@
 # Plan and roles
 
 Goal: route agent workflows (multi-step LLM calls with tool waits in between) across two
-accelerators with different performance profiles (TPU v5e + a GPU, currently a PSC L40S),
+accelerators with different performance profiles (TPU v5e + a GPU, currently an EC2 L40S),
 each running vLLM with prefix caching. Show that a policy that uses the tool gaps to place a
 workflow's context where it is cheapest (working name **GapShift**) beats affinity-only and
 load-only baselines on workflow completion time and TTFT.
@@ -24,6 +24,22 @@ Shared interfaces (change only with a heads-up to everyone):
 - The trace format in `traces/README.md`
 
 ## Status (2026-11-03)
+
+### Implementation update (2026-11-26)
+
+- EC2 replaces PSC in the current deployment. Dedicated setup/serve/tunnel scripts
+  and a new Colab notebook are in `scripts/ec2/` and `scripts/colab/tpu_ec2.ipynb`.
+- PROFILE and GAPSHIFT are implemented with measured-profile inputs, bounded
+  pre-warming, history-based predictions and an explicit oracle ablation.
+- Profiling, repeated comparisons, ablations, engine-metric snapshots and
+  foreground/background analysis are available. See `docs/gapshift.md` and
+  `scripts/ec2/README.md` for commands and assumptions.
+- Local protocol/policy and pipeline tests pass. EC2/TPU installation checks,
+  actual latency profiles and performance comparisons still require hardware runs.
+- Measured HotpotQA traces and final figures remain outstanding. The November
+  PSC tables below remain historical evidence, not EC2 or GapShift results.
+
+### Historical status (2026-11-03)
 
 - [x] vLLM on PSC GPUs (V100 and L40S; V100 can't run prefix caching, see `scripts/psc/README.md`)
 - [x] vLLM-TPU on Colab TPU v5e, GPU reached over an SSH tunnel through the PSC login node

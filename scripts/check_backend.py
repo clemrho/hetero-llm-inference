@@ -1,6 +1,6 @@
 """
 Check that one vLLM backend works and that prefix caching is on.
-Works for any backend (PSC GPU, TPU), standard library only.
+Works for any backend (EC2/PSC GPU, TPU), standard library only.
 
     python scripts/check_backend.py --url http://localhost:8000 --model Qwen/Qwen3-0.6B
 
@@ -40,7 +40,8 @@ def post(url, body, headers=None):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default="http://localhost:8000")
-    ap.add_argument("--model", default="Qwen/Qwen3-0.6B")
+    ap.add_argument("--model", default="Qwen/Qwen3-4B")
+    ap.add_argument("--allow_missing_usage", action="store_true", help="connectivity check only; not enough to validate APC")
     ap.add_argument("--ctx", type=int, default=3000, help="prefix length in words (~tokens)")
     ap.add_argument("--session", default=None, help="send x-session-id (for the PS router)")
     a = ap.parse_args()
@@ -72,6 +73,8 @@ def main():
         print(f"  {name}: {t * 1000:7.1f} ms  prompt_tokens={n}  cached_tokens={c}")
 
     if warm[2] is None:
+        if not a.allow_missing_usage:
+            sys.exit("FAIL cached_tokens missing: start vLLM with --enable-prompt-tokens-details")
         print("WARN cached_tokens not reported (is --enable-prompt-tokens-details set?)")
     elif warm[2] == 0:
         sys.exit("FAIL warm request had 0 cached tokens: prefix caching is not working")
